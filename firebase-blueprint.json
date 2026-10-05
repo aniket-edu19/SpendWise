@@ -1,0 +1,95 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User account information and preferences",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "currency": { "type": "string", "description": "Preferred currency symbol (e.g., ₹, $)" },
+        "isGoldMember": { "type": "boolean" },
+        "planExpiresAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "email"]
+    },
+    "Group": {
+      "title": "Expense Group",
+      "description": "A group (Circle) for sharing expenses",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "imageURL": { "type": "string" },
+        "totalBalance": { "type": "number", "description": "Aggregated net balance for the group" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "ownerId"]
+    },
+    "GroupMember": {
+      "title": "Group Member",
+      "description": "A user's membership in a group",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["owner", "member"] },
+        "balance": { "type": "number", "description": "Individual net balance in this group" },
+        "joinedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "role"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "A financial transaction",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "amount": { "type": "number" },
+        "description": { "type": "string" },
+        "category": { "type": "string", "enum": ["Food", "Travel", "Shopping", "Health", "Fun", "Income", "Other"] },
+        "date": { "type": "string", "format": "date-time" },
+        "paidBy": { "type": "string", "description": "User ID of the person who paid" },
+        "groupId": { "type": "string", "description": "Optional Group ID for shared expenses" },
+        "isPersonal": { "type": "boolean" },
+        "splitType": { "type": "string", "enum": ["equal", "percentage", "amount"] },
+        "splits": { 
+          "type": "object", 
+          "description": "Map of userId to split details (amount or percentage)" 
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "amount", "description", "category", "date", "paidBy"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/groups/{groupId}": {
+      "schema": "Group",
+      "description": "Expense groups"
+    },
+    "/groups/{groupId}/members/{userId}": {
+      "schema": "GroupMember",
+      "description": "Members of a specific group"
+    },
+    "/groups/{groupId}/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "Expenses belonging to a group"
+    },
+    "/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "Personal expenses not tied to a group"
+    }
+  }
+}

@@ -1,0 +1,57 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  
+  --color-primary: #2a14b4;
+  --color-primary-container: #4338ca;
+  --color-on-primary: #ffffff;
+  --color-secondary: #006c4a;
+  --color-secondary-container: #82f5c1;
+  --color-tertiary: #7b0008;
+  --color-background: #f9f9ff;
+  --color-surface: #f9f9ff;
+  --color-on-surface: #151c27;
+  --color-on-surface-variant: #464554;
+  --color-surface-container: #e7eefe;
+  --color-surface-container-low: #f0f3ff;
+  --color-outline: #777586;
+  --color-outline-variant: #c7c4d7;
+  --color-error: #ba1a1a;
+
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-3xl: 2rem;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-on-surface font-sans antialiased;
+  }
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.glass-dark {
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.liquid-glass {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0.1) 100%);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+.ambient-glow {
+  box-shadow: 0 20px 50px -12px rgba(67, 56, 202, 0.25);
+}
+

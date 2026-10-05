@@ -1,0 +1,151 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Helpers
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function isEmailVerified() { return request.auth.token.email_verified == true; }
+
+    // User Profile Rules
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.keys().hasAll(['id', 'name', 'email', 'currency', 'isGoldMember']) &&
+               data.id is string && data.id == userId &&
+               data.id.size() <= 128 &&
+               data.name is string && data.name.size() <= 100 &&
+               data.email is string && data.email.size() <= 100 &&
+               data.currency is string && data.currency.size() <= 10 &&
+               data.isGoldMember is bool;
+      }
+
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && resource.data.id == request.auth.uid;
+      allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().createdAt == request.time;
+      allow update: if isOwner(userId) && isValidUser(incoming()) && 
+                    incoming().createdAt == existing().createdAt &&
+                    incoming().id == existing().id &&
+                    incoming().updatedAt == request.time;
+    }
+
+    // Group Rules
+    match /groups/{groupId} {
+      function isValidGroup(data) {
+        return data.keys().hasAll(['id', 'name', 'ownerId', 'totalBalance']) &&
+               data.id is string && data.id == groupId &&
+               data.name is string && data.name.size() <= 100 &&
+               data.ownerId is string &&
+               data.totalBalance is number;
+      }
+
+      function isGroupOwner(gid) {
+        return get(/databases/$(database)/documents/groups/$(gid)).data.ownerId == request.auth.uid;
+      }
+
+      function isGroupMember(gid) {
+        // Owner is always a member
+        return isGroupOwner(gid) || 
+               exists(/databases/$(database)/documents/groups/$(gid)/members/$(request.auth.uid));
+      }
+
+      allow get: if isSignedIn() && isGroupMember(groupId);
+      allow list: if isSignedIn(); // Handled by collectionGroup or specific owner check
+      allow create: if isSignedIn() && isValidGroup(incoming()) && 
+                    incoming().ownerId == request.auth.uid &&
+                    incoming().createdAt == request.time;
+      allow update: if isSignedIn() && isGroupMember(groupId) && 
+                    incoming().ownerId == existing().ownerId &&
+                    incoming().id == existing().id &&
+                    incoming().updatedAt == request.time &&
+                    (
+                      // Only owner can change name or mark delete
+                      (incoming().diff(existing()).affectedKeys().hasAny(['name', 'imageURL', 'deleted', 'updatedAt', 'memberIds']) && existing().ownerId == request.auth.uid) ||
+                      // Transactions can update totalBalance
+                      (incoming().diff(existing()).affectedKeys().hasOnly(['totalBalance', 'updatedAt']))
+                    );
+
+      // Members Subcollection
+      match /members/{userId} {
+        function isValidMember(data) {
+          // Name is optional in schema but required by validation if we want it
+          return data.keys().hasAll(['userId', 'role', 'balance']) &&
+                 data.userId is string &&
+                 data.role in ['owner', 'member'] &&
+                 data.balance is number;
+        }
+
+        allow get, list: if isSignedIn() && isGroupMember(groupId);
+        allow create: if isSignedIn() && (
+          request.auth.uid == userId || 
+          isGroupOwner(groupId) ||
+          getAfter(/databases/$(database)/documents/groups/$(groupId)).data.ownerId == request.auth.uid
+        );
+        allow update: if isSignedIn() && isGroupMember(groupId) &&
+                      (
+                        // Balance updates (usually from transactions)
+                        (incoming().diff(existing()).affectedKeys().hasOnly(['balance'])) ||
+                        // Group owner can rename any member
+                        (isGroupOwner(groupId) && (incoming().diff(existing()).affectedKeys().hasAny(['name']) || incoming().keys().hasAll(['name']))) ||
+                        // Self update
+                        (request.auth.uid == userId)
+                      );
+      }
+
+      // Group Expenses
+      match /expenses/{expenseId} {
+        function isValidExpense(data) {
+          return data.keys().hasAll(['amount', 'description', 'category', 'date', 'paidBy', 'groupId', 'splits', 'id']) &&
+                 data.amount is number &&
+                 data.paidBy is string &&
+                 data.groupId == groupId;
+        }
+
+        allow get, list: if isSignedIn() && isGroupMember(groupId);
+        allow create: if isSignedIn() && isGroupMember(groupId) && isValidExpense(incoming()) && incoming().createdAt == request.time;
+        allow update: if isSignedIn() && isGroupMember(groupId) && 
+                      isValidExpense(incoming()) && 
+                      incoming().updatedAt == request.time &&
+                      (
+                        existing().paidBy == request.auth.uid || 
+                        isGroupOwner(groupId)
+                      );
+        allow delete: if isSignedIn() && isGroupMember(groupId) && 
+                      (existing().paidBy == request.auth.uid || isGroupOwner(groupId));
+      }
+    }
+
+    // collectionGroup Rules
+    match /{path=**}/expenses/{expenseId} {
+       allow list: if isSignedIn() && (
+         resource.data.paidBy == request.auth.uid || 
+         resource.data.splits[request.auth.uid] != null
+       );
+    }
+
+    match /{path=**}/members/{userId} {
+       allow list: if isSignedIn() && (resource.data.userId == request.auth.uid);
+    }
+
+    // Personal Expenses (Root Collection)
+    match /expenses/{expenseId} {
+      function isValidPersonalExpense(data) {
+        return data.keys().hasAll(['id', 'amount', 'description', 'category', 'date', 'paidBy', 'isPersonal', 'splits', 'createdAt', 'updatedAt']) &&
+               data.isPersonal == true &&
+               data.paidBy == request.auth.uid &&
+               data.id == expenseId;
+      }
+      allow get, list: if isSignedIn() && resource.data.paidBy == request.auth.uid;
+      allow create: if isSignedIn() && isValidPersonalExpense(incoming()) && incoming().createdAt == request.time;
+      allow update: if isSignedIn() && resource.data.paidBy == request.auth.uid && isValidPersonalExpense(incoming()) && incoming().updatedAt == request.time;
+      allow delete: if isSignedIn() && resource.data.paidBy == request.auth.uid;
+    }
+  }
+}
